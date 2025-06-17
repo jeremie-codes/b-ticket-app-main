@@ -201,22 +201,27 @@ export const logout = async (token: string) => {
 
 // User profile functions
 export const updateUserProfile = async (userData: { name: string; email: string; profileImage?: string }) => {
-  await delay(1500); // Simulate API delay
-  // In a real app, this would be a PUT request to the API
-  return {
-    success: true,
-    user: {
-      id: '1',
-      ...userData
-    }
-  };
+  try {
+    const response = await axios.put(`${API_URL}/user/profile`, userData);
+    const { success, user } = response.data;
+    return { success, user };
+  } catch (error: any) {
+    console.log(error.response?.data?.message || 'Profile update failed');
+    throw error;
+  }
 };
 
 export const uploadProfileImage = async (base64Image: string) => {
-  await delay(2000);
-  // In real app, this would upload to your Laravel backend
-  const imageUrl = `https://api.bticket.example.com/uploads/profile_${Date.now()}.jpg`;
-  return { success: true, imageUrl };
+  try {
+    const response = await axios.post(`${API_URL}/user/upload-profile-image`, {
+      image: base64Image
+    });
+    const { success, imageUrl } = response.data;
+    return { success, imageUrl };
+  } catch (error: any) {
+    console.log(error.response?.data?.message || 'Image upload failed');
+    throw error;
+  }
 };
 
 export const deleteAccount = async (token: string) => {
@@ -416,12 +421,14 @@ export const getTicketById = async (id: string) => {
 
 // Payment function
 export const processPayment = async (paymentData: any) => {
-  await delay(2000); // Simulate API delay
-  // In a real app, this would be a POST request to the API
-  return { 
-    success: true, 
-    ticketId: 'ticket1' // Return the first mock ticket for demo purposes
-  };
+  try {
+    const response = await axios.post(`${API_URL}/payments/process`, paymentData);
+    const { success, ticketId } = response.data;
+    return { success, ticketId };
+  } catch (error: any) {
+    console.log(error.response?.data?.message || 'Payment failed');
+    throw error;
+  }
 };
 
 // Set up axios interceptors for adding token to requests

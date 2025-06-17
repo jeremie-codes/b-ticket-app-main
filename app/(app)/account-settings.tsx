@@ -4,27 +4,136 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ArrowLeft, Camera, User, Mail, Save } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotification } from '@/contexts/NotificationContext';
-import { updateUserProfile } from '@/services/api';
+import { updateUserProfile, uploadProfileImage } from '@/services/api';
 
 export default function AccountSettingsScreen() {
   const { user, login } = useAuth();
   const { showNotification } = useNotification();
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
+  const [profileImage, setProfileImage] = useState(user?.profileImage || '');
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     const nameChanged = name !== user?.name;
     const emailChanged = email !== user?.email;
-    setHasChanges(nameChanged || emailChanged);
-  }, [name, email, user]);
+    const imageChanged = profileImage !== user?.profileImage;
+    setHasChanges(nameChanged || emailChanged || imageChanged);
+  }, [name, email, profileImage, user]);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
+  };
+
+  const pickImage = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showNotification('Permission d\'accès à la galerie requise', 'error');
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          setIsUploadingImage(true);
+          try {
+            // Upload image to backend
+            const uploadResult = await uploadProfileImage(asset.base64);
+            if (uploadResult.success) {
+              setProfileImage(uploadResult.imageUrl);
+              showNotification('Photo mise à jour avec succès', 'success');
+            }
+          } catch (error) {
+            showNotification('Erreur lors du téléchargement de l\'image', 'error');
+          } finally {
+            setIsUploadingImage(false);
+          }
+        }
+      }
+    } catch (error) {
+      showNotification('Erreur lors de la sélection de l\'image', 'error');
+      setIsUploadingImage(false);
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        showNotification('Permission d\'accès à la caméra requise', 'error');
+        return;
+      }
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        if (asset.base64) {
+          setIsUploadingImage(true);
+          try {
+            // Upload image to backend
+            const uploadResult = await uploadProfileImage(asset.base64);
+            if (uploadResult.success) {
+              setProfileImage(uploadResult.imageUrl);
+              showNotification('Photo mise à jour avec succès', 'success');
+            }
+          } catch (error) {
+            showNotification('Erreur lors du téléchargement de l\'image', 'error');
+          } finally {
+            setIsUploadingImage(false);
+          }
+        }
+      }
+    } catch (error) {
+      showNotification('Erreur lors de la prise de photo', 'error');
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleProfileImagePress = () => {
+    Alert.alert(
+      "Photo de Profil",
+      "Choisissez une option",
+      [
+        {
+          text: "Galerie",
+          onPress: pickImage
+        },
+        {
+          text: "Caméra",
+          onPress: takePhoto
+        },
+        {
+          text: "Annuler",
+          style: "cancel"
+        }
+      ]
+    );
   };
 
   const handleSave = async () => {
@@ -48,12 +157,10 @@ export default function AccountSettingsScreen() {
       const result = await updateUserProfile({
         name: name.trim(),
         email: email.trim(),
-        profileImage: user?.profileImage
+        profileImage: profileImage
       });
 
       if (result.success) {
-        // Update the auth context with new user data
-        // In a real app, you might want to refresh the user data from the server
         showNotification('Profil mis à jour avec succès', 'success');
         setHasChanges(false);
       }
@@ -62,14 +169,6 @@ export default function AccountSettingsScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleProfileImagePress = () => {
-    Alert.alert(
-      "Photo de Profil",
-      "Cette fonctionnalité sera disponible prochainement",
-      [{ text: "OK" }]
-    );
   };
 
   return (
@@ -93,14 +192,28 @@ export default function AccountSettingsScreen() {
             <TouchableOpacity 
               onPress={handleProfileImagePress}
               className="relative"
+              disabled={isUploadingImage}
             >
-              <View className="bg-primary-600 w-24 h-24 rounded-full items-center justify-center">
-                <Text className="text-white font-['Montserrat-Bold'] text-3xl">
-                  {name.charAt(0).toUpperCase() || 'U'}
-                </Text>
-              </View>
+              {profileImage ? (
+                <Image
+                  source={{ uri: profileImage }}
+                  style={{ width: 96, height: 96, borderRadius: 48 }}
+                  contentFit="cover"
+                />
+              ) : (
+                <View className="bg-primary-600 w-24 h-24 rounded-full items-center justify-center">
+                  <Text className="text-white font-['Montserrat-Bold'] text-3xl">
+                    {name.charAt(0).toUpperCase() || 'U'}
+                  </Text>
+                </View>
+              )}
+              
               <View className="absolute -bottom-2 -right-2 bg-background-card p-2 rounded-full border-2 border-background-dark">
-                <Camera size={16} color="#8b5cf6" />
+                {isUploadingImage ? (
+                  <ActivityIndicator size="small" color="#8b5cf6" />
+                ) : (
+                  <Camera size={16} color="#8b5cf6" />
+                )}
               </View>
             </TouchableOpacity>
             <Text className="text-gray-400 font-['Montserrat-Regular'] text-sm mt-2">
@@ -150,9 +263,9 @@ export default function AccountSettingsScreen() {
 
             <TouchableOpacity
               onPress={handleSave}
-              disabled={!hasChanges || isLoading}
+              disabled={!hasChanges || isLoading || isUploadingImage}
               className={`flex-row items-center justify-center py-4 rounded-xl ${
-                hasChanges && !isLoading 
+                hasChanges && !isLoading && !isUploadingImage
                   ? 'bg-primary-600' 
                   : 'bg-gray-600'
               }`}
